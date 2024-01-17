@@ -1,15 +1,25 @@
 #!/bin/bash
-#SBATCH --nodes=1
-#SBATCH --gres=gpu:4
-#SBATCH --ntasks-per-node=4
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=240000M
-#SBATCH --partition=gpuA100x4
+#SBATCH --time=2-01:20:00
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:a100:1
+#SBATCH --exclude=gpu[04,05]
+#SBATCH --cpus-per-task=2
+#SBATCH --ntasks-per-node=1
+#SBATCH --begin=now
 #SBATCH --job-name=dphubert
-#SBATCH --time=2-00:00:00
+#SBATCH --mem=20000M
 
-# first source conda.sh, and then
-# activate your conda environment
+module load cuda/11.6
+module load lib/cudnn/8.0.5.39_cuda_11.1
+module load lib/nccl/2.1.2_cuda9.0
+module load software/sox/14.4.2
+module load software/matlab/R2019b
+module load comp/cmake/3.10.1
+module load comp/gcc/8.3.0
+module load software/ffmpeg/4.3.1
+module load anaconda/3-5.0.1
+
+source activate /home/reichert/anaconda3/envs/DPHuBERT
 
 set -x
 
@@ -33,7 +43,7 @@ pruning_units=conv,head,interm      # conv,head,interm,attlayer,ffnlayer
 reg_lr=0.02             # learning rate for regularization params
 target_sparsity=0.75    # final target sparsity
 sparsity_warmup=5000    # warmup steps for sparsity; sparsity will linearly increase from 0 to target
-root_dir=exp/hubert-base_${train_subset}_sp${target_sparsity}_spup${sparsity_warmup}_lr${lr}_up${warmup}_max${max}_${distill_mode}${distill_layers}_reglr${reg_lr}_${pruning_units}
+root_dir=exp/hubert-base_${train_subset}_sp${target_sparsity}_spup${sparsity_warmup}_lr${lr}_up${warmup}_max${max}_${distill_mode}${distill_layers}_reglr${reg_lr}_${pruning_units}_a100
 
 # final distill config
 final_lr=0.0001         # learning rate for final distillation (training step 2)
@@ -49,7 +59,7 @@ srun python distill.py \
     --tsv_dir ${tsv_dir} \
     --train_subset ${train_subset} \
     --seconds_per_batch 160 \
-    --num_workers 12 \
+    --num_workers 2 \
     --exp_dir ${root_dir} \
     --log_interval 50 \
     --learning_rate ${lr} \
@@ -58,7 +68,7 @@ srun python distill.py \
     --max_updates ${max} \
     --clip_norm 10.0 \
     --num_nodes 1 \
-    --gpus 4 \
+    --gpus 1 \
     --accum_grad 1 \
     --precision 16 \
     --teacher_ckpt ${teacher_ckpt} \
@@ -88,7 +98,7 @@ srun python final_distill.py \
     --tsv_dir ${tsv_dir} \
     --train_subset ${train_subset} \
     --seconds_per_batch 160 \
-    --num_workers 12 \
+    --num_workers 2 \
     --exp_dir ${final_exp_dir} \
     --log_interval 50 \
     --learning_rate ${final_lr} \
@@ -97,7 +107,7 @@ srun python final_distill.py \
     --max_updates ${final_max} \
     --clip_norm 10.0 \
     --num_nodes 1 \
-    --gpus 4 \
+    --gpus 1 \
     --accum_grad 1 \
     --precision 16 \
     --teacher_ckpt ${teacher_ckpt} \
